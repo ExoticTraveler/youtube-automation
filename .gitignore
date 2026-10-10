@@ -1,0 +1,57 @@
+# Credentials / tokens (never commit)
+secrets/
+*.pickle
+*.pickle.*
+*.pkl
+client_secret*.json
+token*.json
+credentials*.json
+openai_api_key
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime state
+*.lock
+*.log
+logs/
+done/
+failed/
+prepared/
+temp/
+tmp*/
+backup/
+VOID/
+meta.txt
+.sub_done
+*.sqlite
+*.db
+
+# Generated / media / models
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.srt
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.xlsx
+*.docx
+thumbnails/
+thumbnail_source/
+thumbnail_assets/
+thumbnail_reference_library/
+.thumbnail_venv/
+.thumbnail_models/
+
+# Python / OS
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
