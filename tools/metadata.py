@@ -220,6 +220,29 @@ def render(data):
     return f'title:\n{title.strip()}\n\ntitle_alternatives:\n{alternative_text}\n\ndescription:\n{description.strip()}\n\n{INTRO}\n\n{LINKS}\n\nprivacy: unlisted\n\ntags:\n' + ', '.join(tags) + '\n'
 
 
+def sanitize_tags(tags):
+    """Deterministically coerce model tags toward #[A-Za-z0-9_]+ before validation.
+
+    Joins space/hyphen separated words in CamelCase, folds accents, drops emoji and other
+    characters, adds a missing '#', drops the renderer-owned fixed tag, empties and non-strings,
+    removes case-insensitive duplicates and caps at 15. render() still validates the result."""
+    if not isinstance(tags, list):
+        return tags
+    cleaned, seen = [], set()
+    for tag in tags:
+        if not isinstance(tag, str) or tag.strip().casefold() == '#yt:cc=on':
+            continue
+        text = unicodedata.normalize('NFKD', tag).encode('ascii', 'ignore').decode()
+        words = [re.sub(r'[^A-Za-z0-9_]', '', w) for w in re.split(r'[\s\-]+', text)]
+        words = [w for w in words if w]
+        token = words[0] if len(words) == 1 else ''.join(w[:1].upper() + w[1:] for w in words)
+        if not token or token.casefold() in seen:
+            continue
+        seen.add(token.casefold())
+        cleaned.append('#' + token)
+    return cleaned[:15]
+
+
 def api_key():
     key = os.environ.get('OPENAI_API_KEY', '').strip()
     if key:
@@ -357,12 +380,16 @@ def process(project, destination=None, run=False, key=None, model='gpt-4.1-mini'
     # The shared scan/CLI lock is held by main; source checks prevent stale publication.
     key = key or api_key()
     data = request_metadata(transcript, key, model, editorial_context)
+    if isinstance(data, dict) and 'tags' in data:
+        data = dict(data, tags=sanitize_tags(data['tags']))
     try:
         result = render(data)
     except ValidationError as first:
         first_path = save_rejection(project, 'initial', first, data)
         print(f'{project.name}: VALIDATION REJECTED {first}; saved {first_path}; one repair attempt', flush=True)
         repaired = request_metadata(transcript, key, model, repair=(data, first))
+        if isinstance(repaired, dict) and 'tags' in repaired:
+            repaired = dict(repaired, tags=sanitize_tags(repaired['tags']))
         try:
             result = render(repaired)
         except ValidationError as second:
