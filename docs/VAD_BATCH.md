@@ -30,9 +30,9 @@ Default: dry run, no editor invocation and no creation. `--run` explicitly opts 
 
 ## Durability and replay
 
-- The wrapper waits for input files to be nonempty and at least 60 seconds old, compares the source identity before/after execution, and refuses symlinked files. Source identity uses relative path, size, nanosecond modification/change time and inode. It is **not a full content hash** or a guarantee that a concurrently changing filesystem cannot evade detection.
+- The wrapper waits for input files to be nonempty and at least 60 seconds old, compares the source identity before/after execution, and refuses symlinked files. Source identity uses relative path, size, nanosecond modification/change time, inode and SHA-256 of the first/last 64 KiB of each file. This is a **bounded content sample**, not a full media content hash or a guarantee against all concurrent changes.
 - Each output is generated at `.OUTPUTNAME.staging/OUTPUTNAME` under OUTPUT_ROOT. Staging is retained on failure or a change to input; a later run reports `BLOCKED_PARTIAL`, never silently resumes or overwrites it.
-- A successful output is published by a same-filesystem rename, followed by an adjacent `OUTPUTNAME.manifest.json`. The manifest binds the unit path, source signature, output member metadata signature and engine. A verified repeat reports `SKIP_VERIFIED`.
+- A successful output is published by a same-filesystem rename, followed by an adjacent `OUTPUTNAME.manifest.json`. The manifest binds the unit path, source signature, output member metadata and bounded-content signature and engine. A verified repeat reports `SKIP_VERIFIED`.
 - An old output without a matching manifest, a changed input/output, or a crash after output rename but before manifest creation reports `BLOCKED_UNVERIFIED`. Such outputs are **not** overwritten. Inspect them locally before any manual recovery.
 - The output validation requires nonempty regular output members and rejects symlinks, but does not independently verify that Final Cut can import the entire .fcpxmld bundle. That remains a Mac acceptance test.
 - Failures/partial stages need operator inspection. Do not automatically delete them; media processing is not assumed idempotent. No batch-retry loop is enabled.
