@@ -1,6 +1,9 @@
 import importlib.util
 import os
 import tempfile
+import time
+from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -25,7 +28,7 @@ class Discovery(unittest.TestCase):
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0][1], (self.out / "AFG/Herat/INT/INT-1_CLEAN_VAD.fcpxmld").resolve())
         jobs[0][1].mkdir(parents=True)
-        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "SKIP_EXISTING")
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_UNVERIFIED")
 
     def test_output_inside_raw_refused(self):
         with self.assertRaises(ValueError):
@@ -36,6 +39,59 @@ class Discovery(unittest.TestCase):
         other.mkdir(parents=True)
         (other / "clip.mov").write_bytes(b"fake")
         self.assertEqual(len({j[1] for j in vad.discover(self.raw, self.out)}), 2)
+
+    def _old_input(self):
+        os.utime(self.unit / "clip.mov", (time.time() - 130, time.time() - 130))
+
+    def _fake_editor(self, mutate=False):
+        def run(cmd, check=False):
+            out = Path(cmd[cmd.index("--output") + 1])
+            out.mkdir(parents=True)
+            (out / "Info.fcpxml").write_text("<fcpxml />")
+            if mutate:
+                (self.unit / "clip.mov").write_bytes(b"new material")
+            return SimpleNamespace(returncode=0)
+        return run
+
+    def test_staging_manifest_replay_and_stale_output(self):
+        self._old_input()
+        dest = vad.discover(self.raw, self.out)[0][1]
+        with patch.object(vad.subprocess, "run", side_effect=self._fake_editor()):
+            state = vad.process_one(self.unit, dest, self.root / "editor.py", self.raw)
+        self.assertEqual(state, "CREATED")
+        self.assertTrue(vad.manifest_path(dest).is_file())
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "SKIP_VERIFIED")
+        (dest / "Info.fcpxml").write_text("<changed />")
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_UNVERIFIED")
+
+    def test_input_changed_during_edit_never_published(self):
+        self._old_input()
+        dest = vad.discover(self.raw, self.out)[0][1]
+        with patch.object(vad.subprocess, "run", side_effect=self._fake_editor(mutate=True)):
+            state = vad.process_one(self.unit, dest, self.root / "editor.py", self.raw)
+        self.assertEqual(state, "INPUT_CHANGED")
+        self.assertFalse(dest.exists())
+        self.assertTrue(vad.stage_dir(dest).is_dir())
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_PARTIAL")
+
+    def test_output_symlink_back_into_raw_refused(self):
+        self.out.mkdir()
+        (self.out / "AFG").symlink_to(self.raw, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            vad.discover(self.raw, self.out)
+
+    def test_existing_output_without_manifest_refused(self):
+        dest = vad.discover(self.raw, self.out)[0][1]
+        dest.mkdir(parents=True)
+        (dest / "Info.fcpxml").write_text("<fcpxml />")
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_UNVERIFIED")
+        self.assertEqual(vad.process_one(self.unit, dest, self.root / "editor.py", self.raw),
+                         "BLOCKED_UNVERIFIED")
+
+    def test_partial_stage_prevents_duplicate_run(self):
+        dest = vad.discover(self.raw, self.out)[0][1]
+        vad.stage_dir(dest).mkdir(parents=True)
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_PARTIAL")
 
     def test_symlink_unit_not_followed(self):
         link = self.raw / "Kabul" / "INT" / "INT-1"
