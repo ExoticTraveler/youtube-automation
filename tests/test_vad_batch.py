@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("vad_batch", Path(__file__).with_name("vad_batch.py"))
+spec = importlib.util.spec_from_file_location("vad_batch", Path(__file__).resolve().parents[1] / "tools" / "vad_batch.py")
 vad = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vad)
 
