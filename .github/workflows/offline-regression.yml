@@ -1,0 +1,47 @@
+name: YouTube Automation Offline Regression
+
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - 'yt_autoupload.py'
+      - '.github/workflows/offline-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yt-offline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONNOUSERSITE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install test imports only
+        run: |
+          python -m pip install --disable-pip-version-check \
+            google-api-python-client google-auth-httplib2 google-auth-oauthlib httplib2
+      - name: Compile changed production modules
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          for item in ('tools/metadata.py', 'yt_autoupload.py'):
+              ast.parse(Path(item).read_text(encoding='utf-8'), filename=item)
+          print('AST PASS')
+          PY
+      - name: Run isolated offline regression (no OAuth, uploads or external API)
+        run: python -m unittest discover -s tests -p 'test_hashtag_and_upload_request.py' -v
