@@ -74,6 +74,25 @@ class Discovery(unittest.TestCase):
         self.assertTrue(vad.stage_dir(dest).is_dir())
         self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_PARTIAL")
 
+    def test_same_size_rewrites_change_sampled_signatures(self):
+        self._old_input()
+        source = self.unit / "clip.mov"
+        old = source.stat()
+        before = vad.snapshot(self.unit)
+        source.write_bytes(b"FAKE")
+        os.utime(source, ns=(old.st_atime_ns, old.st_mtime_ns))
+        self.assertNotEqual(vad.signature(before), vad.signature(vad.snapshot(self.unit)))
+        self._old_input()
+        dest = vad.discover(self.raw, self.out)[0][1]
+        with patch.object(vad.subprocess, "run", side_effect=self._fake_editor()):
+            self.assertEqual(vad.process_one(self.unit, dest, self.root / "editor.py", self.raw),
+                             "CREATED")
+        output = dest / "Info.fcpxml"
+        prev = output.stat()
+        output.write_bytes(b"<FCpXml />")
+        os.utime(output, ns=(prev.st_atime_ns, prev.st_mtime_ns))
+        self.assertEqual(vad.discover(self.raw, self.out)[0][2], "BLOCKED_UNVERIFIED")
+
     def test_output_symlink_back_into_raw_refused(self):
         self.out.mkdir()
         (self.out / "AFG").symlink_to(self.raw, target_is_directory=True)
