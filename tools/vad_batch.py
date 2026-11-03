@@ -58,8 +58,19 @@ def discover(raw_root, output_root):
     return jobs
 
 
+def _sample_digest(path, size):
+    """Bounded first/last 64 KiB read; never upload or hash entire large video."""
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        h.update(stream.read(65536))
+        if size > 65536:
+            stream.seek(max(0, size - 65536))
+            h.update(stream.read(65536))
+    return h.hexdigest()
+
+
 def snapshot(unit):
-    """File identity, not a full media content hash (large RAW files remain local)."""
+    """Metadata plus bounded content samples of each local source file."""
     items = []
     for base, dirs, files in os.walk(unit, followlinks=False):
         base = Path(base)
@@ -70,8 +81,13 @@ def snapshot(unit):
             if p.is_symlink() or not p.is_file():
                 raise ValueError("non-regular input")
             st = p.stat()
+            sampled = _sample_digest(p, st.st_size)
+            again = p.stat()
+            identity = (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+            if identity != (again.st_size, again.st_mtime_ns, again.st_ctime_ns, again.st_ino):
+                raise ValueError("input changed during snapshot")
             items.append((str(p.relative_to(unit)), st.st_size, st.st_mtime_ns,
-                          st.st_ctime_ns, st.st_ino))
+                          st.st_ctime_ns, st.st_ino, sampled))
     return items
 
 
@@ -170,7 +186,7 @@ def process_one(unit, dest, editor, raw_root):
     before = snapshot(unit)
     now = time.time_ns()
     if not before or any(size == 0 or now - mtime < 60_000_000_000
-                         for _, size, mtime, _, _ in before):
+                         for _, size, mtime, _, _, _ in before):
         return "UNSTABLE"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if within(dest.resolve(), raw_root):
