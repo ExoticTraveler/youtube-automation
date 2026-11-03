@@ -104,7 +104,8 @@ def output_snapshot(dest):
         st = dest.stat()
         if not st.st_size:
             raise ValueError("empty output file")
-        return [[".", st.st_size, st.st_mtime_ns]]
+        return [[".", st.st_size, st.st_mtime_ns, st.st_ctime_ns,
+                 _sample_digest(dest, st.st_size)]]
     if not dest.is_dir():
         raise ValueError("unsupported output type")
     items = []
@@ -119,7 +120,8 @@ def output_snapshot(dest):
             st = p.stat()
             if not st.st_size:
                 raise ValueError("empty output member")
-            items.append([str(p.relative_to(dest)), st.st_size, st.st_mtime_ns])
+            items.append([str(p.relative_to(dest)), st.st_size, st.st_mtime_ns,
+                          st.st_ctime_ns, _sample_digest(p, st.st_size)])
     if not items:
         raise ValueError("empty output bundle")
     return sorted(items)
