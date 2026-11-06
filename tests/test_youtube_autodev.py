@@ -12,6 +12,24 @@ spec.loader.exec_module(mod)
 
 
 class Scope(unittest.TestCase):
+    def test_github_403_diagnostic_omits_tokens_and_query(self):
+        import io
+        import urllib.error
+        from unittest.mock import patch
+        url = mod.API + "/issues/5/comments?access_token=private"
+        err = urllib.error.HTTPError(
+            url, 403, "Forbidden",
+            {"X-Accepted-GitHub-Permissions": "issues=write"}, io.BytesIO(b"private"))
+        with patch.object(mod.urllib.request, "urlopen", side_effect=err):
+            with self.assertRaises(RuntimeError) as caught:
+                mod.req(url, "SECRET-TOKEN", github=True)
+        msg = str(caught.exception)
+        self.assertIn("GitHub HTTP 403 GET /issues/5/comments", msg)
+        self.assertIn("issues=write", msg)
+        self.assertNotIn("SECRET-TOKEN", msg)
+        self.assertNotIn("access_token", msg)
+        self.assertNotIn("private", msg)
+
     def test_config_is_two_explicit_targets(self):
         cfg = mod.cfg()
         self.assertEqual([t["pr"] for t in cfg["targets"]], [5, 1])
