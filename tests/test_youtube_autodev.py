@@ -36,6 +36,39 @@ class Scope(unittest.TestCase):
         self.assertIn("      issues: write", workflow)
         self.assertIn("      contents: read", workflow)
 
+    def test_full_head_source_includes_real_imports_missing_from_patch_hunks(self):
+        import base64
+        t = mod.cfg()["targets"][1]
+        sha = t["initial_sha"]
+        source = "import re\\nimport unicodedata\\ndef sanitize_tags(tags): return tags\\n"
+        blob = {"encoding": "base64",
+                "content": base64.b64encode(source.encode()).decode()}
+        with patch.object(mod, "gh", return_value=blob) as github:
+            result = mod.full_head_source(t, sha)
+        self.assertIn("import re", result)
+        self.assertIn("import unicodedata", result)
+        self.assertIn("HEAD SOURCE tools/metadata.py", result)
+        github.assert_called_once_with("/contents/tools/metadata.py?ref=" + sha)
+
+    def test_missing_head_source_fails_closed(self):
+        target = mod.cfg()["targets"][1]
+        with patch.object(mod, "gh", return_value={"encoding": "none", "content": ""}):
+            with self.assertRaisesRegex(RuntimeError, "missing PR head source"):
+                mod.full_head_source(target, target["initial_sha"])
+
+    def test_claude_fire_http_error_preserves_safe_status_not_secrets(self):
+        t = mod.cfg()["targets"][1]
+        sha = t["initial_sha"]
+        with patch.object(mod, "preflight"), patch.object(mod, "note") as note, \
+             patch.dict(mod.os.environ, {
+                 "CLAUDE_ROUTINE_FIRE_URL": "https://api.anthropic.com/v1/claude_code/routines/trig_fake/fire",
+                 "CLAUDE_ROUTINE_FIRE_TOKEN": "fake-test-token"}), \
+             patch.object(mod, "req", side_effect=RuntimeError("External API HTTP 401")):
+            with self.assertRaisesRegex(RuntimeError, "External API HTTP 401") as caught:
+                mod.fire(t, sha, 123, [], 2)
+        self.assertEqual(note.call_count, 1)  # durable claim BEFORE fire
+        self.assertIn("NO AUTO RETRY", str(caught.exception))
+
     def test_config_is_two_explicit_targets(self):
         cfg = mod.cfg()
         self.assertEqual([t["pr"] for t in cfg["targets"]], [5, 1])
