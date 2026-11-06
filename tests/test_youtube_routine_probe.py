@@ -60,6 +60,21 @@ class ProbeSafety(unittest.TestCase):
             note.assert_not_called()
             api.assert_not_called()
 
+    def test_rotated_api_trigger_url_is_accepted_from_github_secret(self):
+        rotated = "https://api.anthropic.com/v1/claude_code/routines/trig_NewTokenTrigger_6789/fire"
+        token = "sk-ant-oat01-mocknew"
+        with patch.dict(os.environ, {"CLAUDE_ROUTINE_FIRE_URL": rotated,
+                                    "CLAUDE_ROUTINE_FIRE_TOKEN": token}), \
+             patch.object(probe, "note") as note, \
+             patch.object(probe, "api", return_value={
+                 "type": "routine_fire",
+                 "claude_code_session_url": "https://claude.ai/code/session_new123"
+             }) as api:
+            probe.fire()
+            self.assertEqual(api.call_args.args[0], rotated)
+            self.assertEqual(api.call_count, 1)
+            self.assertEqual(note.call_count, 2)
+
     def test_token_prefix_rejected_without_leaking_value(self):
         with patch.dict(os.environ, {"CLAUDE_ROUTINE_FIRE_URL": probe.FIRE_URL,
                                     "CLAUDE_ROUTINE_FIRE_TOKEN": "invalid_secret_token"}), \
