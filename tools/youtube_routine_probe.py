@@ -157,12 +157,11 @@ def main():
         print("SKIP: probe already claimed; NEVER retry")
         return
     # Require an old durable claim with no successful FIRED receipt.
-    # This does not retry an old invocation; V2 is a separate owner-authorized
-    # connectivity attempt after the original was rejected with HTTP 401.
+    # This does not retry an old invocation; V3 is separately owner-authorized after the V2 attempt was rejected with HTTP 401.
     prior_bot = [str(c.get("body", "")) for c in old
                  if c.get("user", {}).get("login") == "github-actions[bot]"]
     if not any(body.startswith(OLD_CLAIM) for body in prior_bot):
-        raise RuntimeError("missing previous V2 probe claim; refusing V2 API request")
+        raise RuntimeError("missing previous V2 probe claim; refusing V3 API request")
     if any(body.startswith(OLD_FIRED) for body in prior_bot):
         raise RuntimeError("previous V2 probe already fired successfully; no V3 API request")
     fire()
