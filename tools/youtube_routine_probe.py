@@ -105,8 +105,15 @@ def verify_command(event):
 def fire():
     url = os.environ.get("CLAUDE_ROUTINE_FIRE_URL", "").strip()
     token = os.environ.get("CLAUDE_ROUTINE_FIRE_TOKEN", "").strip()
-    if url != FIRE_URL:
-        raise RuntimeError("Routine Fire URL does not match the approved YouTube Routine; no request sent")
+    # Regenerating an API trigger can change its trig_* ID, while the saved
+    # routine and its repository remain the same. Validate the fixed Anthropic
+    # host/path only: the per-trigger bearer token binds to that trigger.
+    # The exact URL and token are owner-entered YouTube repository secrets.
+    if not re.fullmatch(
+        r"https://api\.anthropic\.com/v1/claude_code/routines/trig_[A-Za-z0-9_-]+/fire",
+        url
+    ):
+        raise RuntimeError("Routine Fire URL does not match the allowed Anthropic endpoint; no request sent")
     # The Claude API documents the per-Routine token prefix but does not
     # guarantee a specific character class for the remainder of the token.
     if not token.startswith("sk-ant-oat01-") or len(token) <= len("sk-ant-oat01-"):
