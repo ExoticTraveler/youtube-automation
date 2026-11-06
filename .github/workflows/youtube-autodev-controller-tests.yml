@@ -6,6 +6,9 @@ on:
       - 'tools/youtube_autodev_controller.py'
       - 'config/youtube_autodev.json'
       - 'tests/test_youtube_autodev.py'
+      - 'tools/youtube_routine_probe.py'
+      - 'tests/test_youtube_routine_probe.py'
+      - '.github/workflows/youtube-routine-api-probe.yml'
       - '.github/workflows/youtube-autodev-controller.yml'
       - '.github/workflows/youtube-autodev-controller-tests.yml'
   workflow_dispatch:
@@ -25,8 +28,10 @@ jobs:
         with:
           python-version: '3.10'
       - name: Python syntax
-        run: python3 -m py_compile tools/youtube_autodev_controller.py tests/test_youtube_autodev.py
+        run: python3 -m py_compile tools/youtube_autodev_controller.py tests/test_youtube_autodev.py tools/youtube_routine_probe.py tests/test_youtube_routine_probe.py
       - name: Controller synthetic tests
         run: python3 -m unittest discover -s tests -p 'test_youtube_autodev.py' -v
+      - name: Routine one-shot probe synthetic tests
+        run: python3 -m unittest discover -s tests -p 'test_youtube_routine_probe.py' -v
       - name: Validate trusted workflow syntax
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/youtube-autodev-controller.yml .github/workflows/youtube-autodev-controller-tests.yml
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/youtube-autodev-controller.yml .github/workflows/youtube-autodev-controller-tests.yml .github/workflows/youtube-routine-api-probe.yml
