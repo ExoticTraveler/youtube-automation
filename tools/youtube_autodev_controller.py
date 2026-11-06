@@ -65,8 +65,16 @@ def req(url, token, payload=None, github=True):
         with urllib.request.urlopen(request, timeout=65) as response:
             return json.load(response)
     except urllib.error.HTTPError as e:
-        # Never print tokens or potentially sensitive response bodies.
-        raise RuntimeError(("GitHub" if github else "external") + " HTTP " + str(e.code)) from None
+        # GitHub denied an API call. Log only the method, route and permission
+        # hint. Never log tokens, arbitrary error bodies, or a Routine URL.
+        if github:
+            route = url[len(API):].split("?", 1)[0] if url.startswith(API) else "<unexpected-origin>"
+            accepted = str(e.headers.get("X-Accepted-GitHub-Permissions", "not-provided"))[:120]
+            raise RuntimeError(
+                "GitHub HTTP " + str(e.code) + " " + method + " " + route
+                + "; accepted-permissions=" + accepted
+            ) from None
+        raise RuntimeError("External API HTTP " + str(e.code)) from None
     except urllib.error.URLError:
         raise RuntimeError("network error (outcome uncertain if POST)") from None
 
