@@ -7,23 +7,32 @@ The existing Mac-local `youtube_edit.py` remains the editor. This wrapper only d
 ## Layout and output policy
 
 ```text
-RAW_ROOT/COUNTRY/CITY/INT/INT-1/<raw camera files>
-RAW_ROOT/COUNTRY/CITY/NAR/NAR-1/<raw narration files>
-                    ↓
-OUTPUT_ROOT/COUNTRY/CITY/INT/INT-1_CLEAN_VAD.fcpxmld
-OUTPUT_ROOT/COUNTRY/CITY/NAR/NAR-1_CLEAN_VAD.fcpxmld
+ROOT/COUNTRY/CITY/INT/INT-1/<original camera files>      (source: never written)
+ROOT/COUNTRY/CITY/INT/INT-1_CLEAN_VAD.fcpxmld            (generated, sibling of UNIT)
+ROOT/COUNTRY/CITY/INT/INT-1_CLEAN_VAD.fcpxmld.manifest.json
+ROOT/COUNTRY/CITY/INT/.INT-1_CLEAN_VAD.fcpxmld.staging/  (only while running / after failure)
+ROOT/COUNTRY/CITY/NAR/NAR-1/<original narration files>
+ROOT/COUNTRY/CITY/NAR/NAR-1_CLEAN_VAD.fcpxmld
 ```
 
-If RAW_ROOT is already a country directory, its directory name supplies COUNTRY. The country and city values are discovered dynamically; do not use a city name as a UNIT. A UNIT must match `INT-<number>` or `NAR-<number>` under its matching kind folder. Two cities can each contain `INT-1`, with distinct outputs.
+`--root` (alias `--raw-root`) is the single tree that holds both source UNITs and their generated outputs. There is no separate output root any more; `--output-root` is rejected. If ROOT is itself a country directory, `CITY/KIND/UNIT` is also accepted. Country and city are discovered dynamically; a UNIT must match `INT-<number>` or `NAR-<number>` under its matching kind folder. Two cities can each contain `INT-1`, with distinct outputs.
 
-OUTPUT_ROOT must be explicitly provided and must be separate from RAW_ROOT. The wrapper rejects roots nested inside each other, symlinked units, and output paths that resolve into RAW. Never direct this script to write generated data into a RAW folder.
+### Write allowlist (what "RAW protection" now means)
+
+The wrapper writes to exactly three names per UNIT, all directly inside that UNIT's `INT`/`NAR` directory: `{UNIT}_CLEAN_VAD.fcpxmld`, its `.manifest.json`, and the hidden `.staging` directory. `validate_output_target` checks this before discovery reports a job and again immediately before writing:
+
+- the UNIT is a canonical (non-symlink, fully resolved) directory inside ROOT at depth `[COUNTRY/]CITY/KIND/UNIT`, its kind folder matches its prefix, and no ancestor is itself a UNIT;
+- the output path is **exactly** `UNIT.parent / (UNIT.name + "_CLEAN_VAD.fcpxmld")`. A matching filename elsewhere, `..` traversal, other kind/city folders, or any path inside a UNIT tree is refused (`BLOCKED_OUTPUT_PATH`);
+- the INT/NAR directory is not a symlink and resolves to itself.
+
+Nothing inside a UNIT directory is ever created, renamed or deleted. The editor reads `--unit` and writes only into the staging directory. Discovery does not follow symlinks, and it does not descend into hidden directories or `*.fcpxmld` bundles, so generated output is never mistaken for source.
 
 ## Usage on the owner's Mac (example placeholders; not a production command)
 
 ```sh
-python3 tools/vad_batch.py --raw-root "<RAW_ROOT>" --output-root "<OUTPUT_ROOT>"
-# after inspecting the planned jobs and choosing a non-RAW output directory:
-python3 tools/vad_batch.py --raw-root "<RAW_ROOT>" --output-root "<OUTPUT_ROOT>" --editor "<LOCAL_YOUTUBE_EDIT_PY>" --run
+python3 tools/vad_batch.py --root "<ROOT>"
+# after inspecting the planned jobs (dry run, writes nothing):
+python3 tools/vad_batch.py --root "<ROOT>" --editor "<LOCAL_YOUTUBE_EDIT_PY>" --run
 ```
 
 Default: dry run, no editor invocation and no creation. `--run` explicitly opts in, and requires a pre-existing local editor script. This has not yet been integrated with a file watcher or launchd; simply copying files does not trigger it automatically.
@@ -31,7 +40,7 @@ Default: dry run, no editor invocation and no creation. `--run` explicitly opts 
 ## Durability and replay
 
 - The wrapper waits for input files to be nonempty and at least 60 seconds old, compares the source identity before/after execution, and refuses symlinked files. Source identity uses relative path, size, nanosecond modification/change time, inode and SHA-256 of the first/last 64 KiB of each file. This is a **bounded content sample**, not a full media content hash or a guarantee against all concurrent changes.
-- Each output is generated at `.OUTPUTNAME.staging/OUTPUTNAME` under OUTPUT_ROOT. Staging is retained on failure or a change to input; a later run reports `BLOCKED_PARTIAL`, never silently resumes or overwrites it.
+- Each output is generated at `.OUTPUTNAME.staging/OUTPUTNAME` in the same INT/NAR directory. Staging is retained on failure or a change to input; a later run reports `BLOCKED_PARTIAL`, never silently resumes or overwrites it.
 - A successful output is published by a same-filesystem rename, followed by an adjacent `OUTPUTNAME.manifest.json`. The manifest binds the unit path, source signature, output member metadata and bounded-content signature and engine. A verified repeat reports `SKIP_VERIFIED`.
 - An old output without a matching manifest, a changed input/output, or a crash after output rename but before manifest creation reports `BLOCKED_UNVERIFIED`. Such outputs are **not** overwritten. Inspect them locally before any manual recovery.
 - The output validation requires nonempty regular output members and rejects symlinks, but does not independently verify that Final Cut can import the entire .fcpxmld bundle. That remains a Mac acceptance test.

@@ -14,22 +14,59 @@ UNIT = re.compile(r"(INT|NAR)-[0-9]+\Z", re.I)
 MEDIA = {".mp4", ".mov", ".mxf", ".wav", ".mp3", ".m4a", ".aac"}
 
 
+KINDS = ("INT", "NAR")
+SUFFIX = "_CLEAN_VAD.fcpxmld"
+
+
 def within(path, root):
     return path == root or root in path.parents
 
 
-def discover(raw_root, output_root):
-    raw_root = Path(raw_root).resolve(strict=True)
-    output_root = Path(output_root).resolve()
-    if not raw_root.is_dir() or within(output_root, raw_root) or within(raw_root, output_root):
-        raise ValueError("output root and RAW root must be separate")
+def output_for(unit):
+    """The one allowed output location: sibling of UNIT inside its INT/NAR directory."""
+    return unit.parent / (unit.name + SUFFIX)
+
+
+def validate_output_target(root, unit, dest):
+    """Explicit allowlist. Raises ValueError unless dest is exactly
+    ROOT/[COUNTRY/]CITY/{INT,NAR}/{UNIT}_CLEAN_VAD.fcpxmld for this canonical UNIT.
+    Staging and manifest names are derived from dest, so they sit in the same
+    directory and are covered by this check. Never inside a UNIT tree."""
+    root = Path(root)
+    if root.resolve() != root:
+        raise ValueError("root is not canonical")
+    if unit.is_symlink() or unit.resolve() != unit or not within(unit, root):
+        raise ValueError("unit is not a canonical path inside root")
+    rel = unit.relative_to(root)
+    kind = unit.parent
+    if len(rel.parts) not in (3, 4) or kind.name.upper() not in KINDS \
+            or not UNIT.fullmatch(unit.name) \
+            or unit.name.upper().split("-")[0] != kind.name.upper():
+        raise ValueError("unit is not under a matching INT/NAR directory")
+    if any(UNIT.fullmatch(part) for part in rel.parts[:-1]):
+        raise ValueError("unit nested inside another unit")
+    if dest != output_for(unit):  # exact match: rejects traversal, other dirs, other names
+        raise ValueError("output is not the allowed sibling of its unit")
+    if dest.parent.resolve() != dest.parent or dest.parent.is_symlink():
+        raise ValueError("output directory is symlinked or non-canonical")
+    if dest == unit or unit in dest.parents:
+        raise ValueError("output inside unit tree")
+
+
+def discover(root):
+    root = Path(root).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("root must be a directory")
     jobs = []
     seen = set()
-    for base, dirs, files in os.walk(raw_root, followlinks=False):
+    for base, dirs, files in os.walk(root, followlinks=False):
         base = Path(base)
-        dirs[:] = sorted(d for d in dirs if not (base / d).is_symlink())
-        rel = base.relative_to(raw_root)
-        if len(rel.parts) >= 3 and rel.parts[-2].upper() in ("INT", "NAR") and UNIT.fullmatch(base.name):
+        # never descend into symlinks, hidden staging dirs or generated bundles
+        dirs[:] = sorted(d for d in dirs if not (base / d).is_symlink()
+                         and not d.startswith(".") and not d.endswith(".fcpxmld"))
+        rel = base.relative_to(root)
+        if len(rel.parts) >= 3 and rel.parts[-2].upper() in KINDS and UNIT.fullmatch(base.name):
+            dirs[:] = []  # a unit is a leaf; nothing inside it is ever a target
             kind = rel.parts[-2].upper()
             if base.name.upper().split("-")[0] != kind:
                 raise ValueError("unit kind mismatch")
@@ -43,18 +80,15 @@ def discover(raw_root, output_root):
                 continue
             if any((base / f).is_symlink() for f in files):
                 raise ValueError("symlink in unit")
-            mapped = rel.parts if len(rel.parts) == 4 else (raw_root.name, *rel.parts)
-            dest = output_root.joinpath(*mapped[:-1], base.name + "_CLEAN_VAD.fcpxmld")
-            if within(dest.resolve(), raw_root):
-                raise ValueError("mapped output resolves inside RAW")
+            dest = output_for(base)
+            validate_output_target(root, base, dest)
             if dest.exists() or dest.is_symlink():
                 state = "SKIP_VERIFIED" if valid_existing(base, dest) else "BLOCKED_UNVERIFIED"
-            elif stage_dir(dest).exists():
+            elif stage_dir(dest).exists() or stage_dir(dest).is_symlink():
                 state = "BLOCKED_PARTIAL"
             else:
                 state = "READY"
             jobs.append((base, dest, state))
-            dirs[:] = []
     return jobs
 
 
@@ -132,7 +166,7 @@ def manifest_path(dest):
 
 
 def stage_dir(dest):
-    """Durable one-job claim, outside RAW; abandoned staging blocks a retry."""
+    """Durable one-job claim next to the output (hidden, never inside a UNIT); abandoned staging blocks a retry."""
     return dest.with_name("." + dest.name + ".staging")
 
 
@@ -176,10 +210,13 @@ def write_manifest(dest, unit, input_state):
             os.unlink(tmp)
 
 
-def process_one(unit, dest, editor, raw_root):
-    """No RAW writes. Output is staged and published only after input recheck."""
-    if within(dest.resolve(), raw_root):
-        return "BLOCKED_RAW_PATH"
+def process_one(unit, dest, editor, root):
+    """Writes only the allowlisted sibling output, its staging dir and manifest.
+    Output is staged and published only after an input recheck."""
+    try:
+        validate_output_target(root, unit, dest)
+    except ValueError:
+        return "BLOCKED_OUTPUT_PATH"
     if dest.exists() or dest.is_symlink():
         return "SKIP_VERIFIED" if valid_existing(unit, dest) else "BLOCKED_UNVERIFIED"
     stage = stage_dir(dest)
@@ -190,9 +227,10 @@ def process_one(unit, dest, editor, raw_root):
     if not before or any(size == 0 or now - mtime < 60_000_000_000
                          for _, size, mtime, _, _, _ in before):
         return "UNSTABLE"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if within(dest.resolve(), raw_root):
-        return "BLOCKED_RAW_PATH"
+    try:
+        validate_output_target(root, unit, dest)  # re-check immediately before writing
+    except ValueError:
+        return "BLOCKED_OUTPUT_PATH"
     try:
         stage.mkdir()  # atomic one-job reservation; a failed run leaves evidence
     except FileExistsError:
@@ -222,21 +260,22 @@ def process_one(unit, dest, editor, raw_root):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--raw-root", required=True, type=Path)
-    ap.add_argument("--output-root", required=True, type=Path)
+    ap.add_argument("--root", "--raw-root", dest="root", required=True, type=Path,
+                    help="ROOT containing [COUNTRY/]CITY/{INT,NAR}/UNIT; outputs are "
+                         "written beside each UNIT, inside its INT/NAR directory")
     ap.add_argument("--editor", type=Path, help="Mac-local youtube_edit.py")
     ap.add_argument("--run", action="store_true", help="opt in to VAD execution")
     args = ap.parse_args(argv)
-    raw_root = args.raw_root.resolve(strict=True)
-    jobs = discover(raw_root, args.output_root)
+    root = args.root.resolve(strict=True)
+    jobs = discover(root)
     if args.run and (not args.editor or not args.editor.is_file()):
         ap.error("--run requires --editor")
     failures = 0
     for unit, dest, state in jobs:
         if state == "READY" and args.run:
-            state = process_one(unit, dest, args.editor, raw_root)
+            state = process_one(unit, dest, args.editor, root)
         if state in ("FAILED", "INPUT_CHANGED", "UNSTABLE",
-                     "BLOCKED_UNVERIFIED", "BLOCKED_PARTIAL", "BLOCKED_RAW_PATH"):
+                     "BLOCKED_UNVERIFIED", "BLOCKED_PARTIAL", "BLOCKED_OUTPUT_PATH"):
             failures += 1
         print(json.dumps({"unit": str(unit), "output": str(dest), "status": state}))
     return 1 if failures else 0
