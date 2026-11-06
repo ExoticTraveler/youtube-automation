@@ -53,7 +53,7 @@ def req(url, token, payload=None, github=True):
     }
     if github:
         headers["X-GitHub-Api-Version"] = "2022-11-28"
-    else:
+    elif url.startswith("https://api.anthropic.com/"):
         headers["anthropic-version"] = "2026-10-21"
         headers["anthropic-beta"] = "experimental-cc-routine-2026-04-01"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -414,6 +414,11 @@ def main():
         state = review_once(t, config)
         if state != "PASS":
             return
+    complete = marker("PARENT-CODE-COMPLETE", first["pr"], first["initial_sha"])
+    if not any(b.startswith(complete) for b in receipts(first["pr"])):
+        note(first["pr"], complete +
+             "\nVAD PR #5 and Uploader PR #1 passed exact-SHA GPT code-only review. "
+             "Separate Mac acceptance, integration and merge remain pending.")
     print("PARENT_CODE_REVIEW_COMPLETE: both PRs passed code-only gate; Mac acceptance pending")
 
 
