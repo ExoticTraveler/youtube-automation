@@ -150,6 +150,8 @@ def check_code_scope(t, current_sha, bodies):
         return
     last = claims[-1].splitlines()[0]
     base = last.split("sha=", 1)[1].split(" -->", 1)[0]
+    if not any(b.startswith(marker("FIRED", t["pr"], base)) for b in bodies):
+        raise RuntimeError("Routine fire outcome not confirmed after claim; do not infer success")
     if current_sha == base:
         return
     comparison = gh("/compare/" + base + "..." + current_sha)
