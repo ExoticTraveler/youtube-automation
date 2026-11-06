@@ -112,6 +112,41 @@ class ProbeSafety(unittest.TestCase):
                 probe.main()
                 fire.assert_not_called()
 
+    def test_v2_requires_previous_401_probe_claim(self):
+        event = self.event()
+        with tempfile.TemporaryDirectory() as temp:
+            fp = Path(temp) / "event.json"
+            fp.write_text(json.dumps(event))
+            with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(fp)}), \
+                 patch.object(probe, "verify_command", return_value=True), \
+                 patch.object(probe, "get_comments", return_value=[]), \
+                 patch.object(probe, "fire") as fire:
+                with self.assertRaisesRegex(RuntimeError, "missing original probe claim"):
+                    probe.main()
+                fire.assert_not_called()
+
+    def test_v2_refuses_if_previous_probe_was_successful(self):
+        event = self.event()
+        with tempfile.TemporaryDirectory() as temp:
+            fp = Path(temp) / "event.json"
+            fp.write_text(json.dumps(event))
+            rows = [
+                {"user": {"login": "github-actions[bot]"}, "body": probe.OLD_CLAIM},
+                {"user": {"login": "github-actions[bot]"}, "body": probe.OLD_FIRED},
+            ]
+            with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(fp)}), \
+                 patch.object(probe, "verify_command", return_value=True), \
+                 patch.object(probe, "get_comments", return_value=rows), \
+                 patch.object(probe, "fire") as fire:
+                with self.assertRaisesRegex(RuntimeError, "already fired successfully"):
+                    probe.main()
+                fire.assert_not_called()
+
+    def test_v2_new_claim_is_distinct_from_original_claim(self):
+        self.assertNotEqual(probe.CLAIM, probe.OLD_CLAIM)
+        self.assertNotEqual(probe.FIRED, probe.OLD_FIRED)
+        self.assertIn("PROBE-V2", probe.COMMAND)
+
     def test_external_http_error_hides_body_and_token(self):
         err = urllib.error.HTTPError(probe.FIRE_URL, 401, "error", {},
                                      io.BytesIO(b"very-sensitive-body"))
