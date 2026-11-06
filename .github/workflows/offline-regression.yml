@@ -45,3 +45,5 @@ jobs:
           PY
       - name: Run isolated offline regression (no OAuth, uploads or external API)
         run: python -m unittest discover -s tests -p 'test_hashtag_and_upload_request.py' -v
+      - name: Run VAD batch filesystem and crash-safety regression
+        run: python -m unittest discover -s tests -p 'test_vad_batch.py' -v
