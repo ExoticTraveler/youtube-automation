@@ -36,7 +36,8 @@ jobs:
     permissions:
       actions: read
       contents: read
-      pull-requests: read
+      # PR timeline comment writes can require both scopes for a job token.
+      pull-requests: write
       issues: write
     steps:
       - name: Checkout trusted main only
