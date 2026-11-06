@@ -1,0 +1,32 @@
+name: YouTube AutoDev Controller Synthetic Tests
+
+on:
+  pull_request:
+    paths:
+      - 'tools/youtube_autodev_controller.py'
+      - 'config/youtube_autodev.json'
+      - 'tests/test_youtube_autodev.py'
+      - '.github/workflows/youtube-autodev-controller.yml'
+      - '.github/workflows/youtube-autodev-controller-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10'
+      - name: Python syntax
+        run: python3 -m py_compile tools/youtube_autodev_controller.py tests/test_youtube_autodev.py
+      - name: Controller synthetic tests
+        run: python3 -m unittest discover -s tests -p 'test_youtube_autodev.py' -v
+      - name: Validate trusted workflow syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/youtube-autodev-controller.yml .github/workflows/youtube-autodev-controller-tests.yml

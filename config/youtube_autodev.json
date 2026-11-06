@@ -1,0 +1,54 @@
+{
+  "repository": "ExoticTraveler/youtube-automation",
+  "model": "gpt-5-mini",
+  "max_fires_per_pr": 2,
+  "max_reviews_per_pr": 4,
+  "targets": [
+    {
+      "pr": 5,
+      "base": "codex/vad-batch-discovery-20261103",
+      "branch": "claude/exciting-goodall-uqu6dk",
+      "initial_sha": "62588609a3adea4cb3be8fd025f8b80af63903b9",
+      "ci_workflow_blob_sha": "3006d331ddd543f2d7487f420fcaa3bbb6524122",
+      "goal": "VAD PR #5's output sibling allowlist, path and symlink safety, verified skip/staging, and single-UNIT accidental-write prevention",
+      "allowed_files": [
+        "tools/vad_batch.py",
+        "tests/test_vad_batch.py",
+        "docs/VAD_BATCH.md"
+      ],
+      "repair_files": [
+        "tools/vad_batch.py",
+        "tests/test_vad_batch.py",
+        "docs/VAD_BATCH.md"
+      ],
+      "ci_steps": [
+        "Run VAD batch filesystem and crash-safety regression",
+        "Run isolated offline regression (no OAuth, uploads or external API)"
+      ],
+      "base_sha": "56a464e37eb48719c6c0b75a02afa39d4ef9ddf3"
+    },
+    {
+      "pr": 1,
+      "base": "main",
+      "branch": "claude/hashtag-validation-backup-20261031",
+      "initial_sha": "3d0b82134c2298a78325e4b574231b0bccfd068a",
+      "ci_workflow_blob_sha": "55b1ca8e840af5c9efd49775c8cef1df95f77bf2",
+      "goal": "Uploader PR #1's hashtag sanitization and upload/OAuth offline regression, without actual OAuth operations or publishing",
+      "allowed_files": [
+        ".github/workflows/offline-regression.yml",
+        "docs/RELEASE_RECORD_20261103.md",
+        "tests/test_hashtag_and_upload_request.py",
+        "tools/metadata.py"
+      ],
+      "repair_files": [
+        "docs/RELEASE_RECORD_20261103.md",
+        "tests/test_hashtag_and_upload_request.py",
+        "tools/metadata.py"
+      ],
+      "ci_steps": [
+        "Run isolated offline regression (no OAuth, uploads or external API)"
+      ],
+      "base_sha": null
+    }
+  ]
+}
