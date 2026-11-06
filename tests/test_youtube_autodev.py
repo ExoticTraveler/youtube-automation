@@ -50,20 +50,24 @@ class Scope(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "before trusted first dispatch"):
                 mod.check_code_scope(t, "a" * 40, [])
         claim = mod.marker("FIRE-CLAIM", 5, initial) + "\nClaim."
+        fired = mod.marker("FIRED", 5, initial) + "\nConfirmed."
         self.assertEqual(mod.marker("FIRE-CLAIM", 5, initial),
                          "<!-- YT-AUTODEV-FIRE-CLAIM pr=5 sha=" + initial + " -->")
+        with patch.object(mod, "gh", return_value=files):
+            with self.assertRaisesRegex(RuntimeError, "not confirmed"):
+                mod.check_code_scope(t, initial, [claim])
         with patch.object(mod, "gh", side_effect=[
                 files,
                 {"status": "ahead", "behind_by": 0, "ahead_by": 1,
                  "commits": [{"sha": "b" * 40}],
                  "files": [{"filename": "tools/vad_batch.py", "status": "modified"}]}]):
-            mod.check_code_scope(t, "b" * 40, [claim])
+            mod.check_code_scope(t, "b" * 40, [claim, fired])
         with patch.object(mod, "gh", side_effect=[
                 files, {"status": "ahead", "behind_by": 0, "ahead_by": 2,
                         "commits": [{"sha": "b" * 40}],
                         "files": files}]):
             with self.assertRaisesRegex(RuntimeError, "branch history"):
-                mod.check_code_scope(t, "b" * 40, [claim])
+                mod.check_code_scope(t, "b" * 40, [claim, fired])
 
     def test_ci_requires_pinned_workflow_and_all_steps(self):
         t = mod.cfg()["targets"][0]
