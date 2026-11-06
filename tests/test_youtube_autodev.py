@@ -30,6 +30,12 @@ class Scope(unittest.TestCase):
         self.assertNotIn("access_token", msg)
         self.assertNotIn("private", msg)
 
+    def test_trusted_controller_can_comment_on_prs(self):
+        workflow = (SOURCE.parents[1] / ".github/workflows/youtube-autodev-controller.yml").read_text()
+        self.assertIn("      pull-requests: write", workflow)
+        self.assertIn("      issues: write", workflow)
+        self.assertIn("      contents: read", workflow)
+
     def test_config_is_two_explicit_targets(self):
         cfg = mod.cfg()
         self.assertEqual([t["pr"] for t in cfg["targets"]], [5, 1])
