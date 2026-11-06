@@ -60,6 +60,9 @@ class Scope(unittest.TestCase):
         t = mod.cfg()["targets"][1]
         sha = t["initial_sha"]
         with patch.object(mod, "preflight"), patch.object(mod, "note") as note, \
+             patch.dict(mod.os.environ, {
+                 "CLAUDE_ROUTINE_FIRE_URL": "https://api.anthropic.com/v1/claude_code/routines/trig_fake/fire",
+                 "CLAUDE_ROUTINE_FIRE_TOKEN": "fake-test-token"}), \
              patch.object(mod, "req", side_effect=RuntimeError("External API HTTP 401")):
             with self.assertRaisesRegex(RuntimeError, "External API HTTP 401") as caught:
                 mod.fire(t, sha, 123, [], 2)
