@@ -111,6 +111,7 @@ def live(t):
     if (pr.get("state") != "open" or pr.get("number") != t["pr"]
         or head.get("repo", {}).get("full_name") != REPO
         or head.get("ref") != t["branch"] or base.get("ref") != t["base"]
+        or (t.get("base_sha") is not None and base.get("sha") != t["base_sha"])
         or not SHA_RE.fullmatch(head.get("sha", ""))):
         raise RuntimeError("PR " + str(t["pr"]) + " changed state/base/branch/repo")
     return pr
