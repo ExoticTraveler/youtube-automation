@@ -1,0 +1,41 @@
+name: YouTube uploader GPT API V2 reconciliation
+
+# One-shot historical false-positive re-review, not a repair dispatcher.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+concurrency:
+  group: youtube-autodev-review-loop
+  cancel-in-progress: false
+
+jobs:
+  uploader-v2:
+    if: >-
+      github.event.issue.number == 1 &&
+      github.event.issue.pull_request &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'YT-AUTODEV-REVIEW-V2 sha=3d0b82134c2298a78325e4b574231b0bccfd068a'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Pinned-head OpenAI API re-review, no Claude dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python3 tools/youtube_review_reconcile.py
