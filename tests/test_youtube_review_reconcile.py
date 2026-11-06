@@ -21,7 +21,7 @@ spec.loader.exec_module(recon)
 
 class ReconcileSafety(unittest.TestCase):
     def event(self):
-        return {"action": "created", "issue": {"number": 1, "pull_request": {}},
+        return {"action": "created", "issue": {"number": 1, "pull_request": {"url": "example"}},
                 "comment": {"user": {"login": "ExoticTraveler"}, "author_association": "OWNER",
                             "body": recon.COMMAND}}
 
