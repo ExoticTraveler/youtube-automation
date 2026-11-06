@@ -20,11 +20,11 @@ SHA = "3d0b82134c2298a78325e4b574231b0bccfd068a"
 BRANCH = "claude/hashtag-validation-backup-20261031"
 ROUTINE = "trig_01XubzuYGWQaR56yQZ52mmb5"
 FIRE_URL = "https://api.anthropic.com/v1/claude_code/routines/" + ROUTINE + "/fire"
-COMMAND = "YT-AUTODEV-API-PROBE-V2 sha=" + SHA
-CLAIM = "<!-- YT-AUTODEV-API-PROBE-V2-CLAIM pr=1 sha=" + SHA + " -->"
-FIRED = "<!-- YT-AUTODEV-API-PROBE-V2-FIRED pr=1 sha=" + SHA + " -->"
-OLD_CLAIM = "<!-- YT-AUTODEV-API-PROBE-CLAIM pr=1 sha=" + SHA + " -->"
-OLD_FIRED = "<!-- YT-AUTODEV-API-PROBE-FIRED pr=1 sha=" + SHA + " -->"
+COMMAND = "YT-AUTODEV-API-PROBE-V3 sha=" + SHA
+CLAIM = "<!-- YT-AUTODEV-API-PROBE-V3-CLAIM pr=1 sha=" + SHA + " -->"
+FIRED = "<!-- YT-AUTODEV-API-PROBE-V3-FIRED pr=1 sha=" + SHA + " -->"
+OLD_CLAIM = "<!-- YT-AUTODEV-API-PROBE-V2-CLAIM pr=1 sha=" + SHA + " -->"
+OLD_FIRED = "<!-- YT-AUTODEV-API-PROBE-V2-FIRED pr=1 sha=" + SHA + " -->"
 GH_BASE = "https://api.github.com/repos/" + REPO
 
 
@@ -37,7 +37,8 @@ def api(url, token, payload=None, *, github=False):
     if github:
         headers["X-GitHub-Api-Version"] = "2022-11-28"
     else:
-        headers["anthropic-version"] = "2026-10-21"
+        headers["anthropic-version"] = "2023-06-01"
+        headers["anthropic-beta"] = "experimental-cc-routine-2026-04-01"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -125,7 +126,7 @@ def fire():
         "This is NOT a GPT FAIL_ACTIONABLE review, code repair, commit authorization "
         "or a request to run media, tools, tests, or external APIs. "
         "Work on no files; do not alter PRs, branches, video, OAuth, secrets or GitHub. "
-        "Reply briefly 'YT_AUTODEV_API_CONNECTION_OK_V2' and stop. "
+        "Reply briefly 'YT_AUTODEV_API_CONNECTION_OK_V3' and stop. "
         "This diagnostic session does NOT override existing PR #1 or #5 decisions."
     )
     try:
@@ -161,9 +162,9 @@ def main():
     prior_bot = [str(c.get("body", "")) for c in old
                  if c.get("user", {}).get("login") == "github-actions[bot]"]
     if not any(body.startswith(OLD_CLAIM) for body in prior_bot):
-        raise RuntimeError("missing original probe claim; refusing V2 API request")
+        raise RuntimeError("missing previous V2 probe claim; refusing V2 API request")
     if any(body.startswith(OLD_FIRED) for body in prior_bot):
-        raise RuntimeError("original probe already fired successfully; no V2 API request")
+        raise RuntimeError("previous V2 probe already fired successfully; no V3 API request")
     fire()
 
 
