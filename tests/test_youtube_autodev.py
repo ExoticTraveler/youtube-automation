@@ -28,6 +28,19 @@ class Scope(unittest.TestCase):
             "https://api.anthropic.com/v1/claude_code/routines/trig_Abc_123/fire"))
         self.assertFalse(mod.ROUTINE_RE.fullmatch("https://example.com/fire"))
 
+    def test_stacked_base_is_pinned(self):
+        target = mod.cfg()["targets"][0]
+        pr = {"state": "open", "number": 5,
+              "head": {"sha": target["initial_sha"], "ref": target["branch"],
+                       "repo": {"full_name": mod.REPO}},
+              "base": {"ref": target["base"], "sha": target["base_sha"]}}
+        with patch.object(mod, "gh", return_value=pr):
+            self.assertEqual(mod.live(target)["number"], 5)
+        pr["base"]["sha"] = "c" * 40
+        with patch.object(mod, "gh", return_value=pr):
+            with self.assertRaisesRegex(RuntimeError, "base"):
+                mod.live(target)
+
     def test_allowlist_rejects_renames_and_external_paths(self):
         mod.safe_changed_files([{"filename": "tools/vad_batch.py", "status": "modified"}],
                                {"tools/vad_batch.py"})
