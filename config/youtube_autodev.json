@@ -24,7 +24,8 @@
       "ci_steps": [
         "Run VAD batch filesystem and crash-safety regression",
         "Run isolated offline regression (no OAuth, uploads or external API)"
-      ]
+      ],
+      "base_sha": "56a464e37eb48719c6c0b75a02afa39d4ef9ddf3"
     },
     {
       "pr": 1,
@@ -46,7 +47,8 @@
       ],
       "ci_steps": [
         "Run isolated offline regression (no OAuth, uploads or external API)"
-      ]
+      ],
+      "base_sha": null
     }
   ]
 }
