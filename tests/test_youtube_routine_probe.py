@@ -55,8 +55,18 @@ class ProbeSafety(unittest.TestCase):
         with patch.dict(os.environ, {"CLAUDE_ROUTINE_FIRE_URL": "https://wrong.example/fire",
                                     "CLAUDE_ROUTINE_FIRE_TOKEN": "sk-ant-oat01-fake"}), \
              patch.object(probe, "note") as note, patch.object(probe, "api") as api:
-            with self.assertRaisesRegex(RuntimeError, "mismatch"):
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
                 probe.fire()
+            note.assert_not_called()
+            api.assert_not_called()
+
+    def test_token_prefix_rejected_without_leaking_value(self):
+        with patch.dict(os.environ, {"CLAUDE_ROUTINE_FIRE_URL": probe.FIRE_URL,
+                                    "CLAUDE_ROUTINE_FIRE_TOKEN": "invalid_secret_token"}), \
+             patch.object(probe, "note") as note, patch.object(probe, "api") as api:
+            with self.assertRaisesRegex(RuntimeError, "required prefix") as err:
+                probe.fire()
+            self.assertNotIn("invalid_secret_token", str(err.exception))
             note.assert_not_called()
             api.assert_not_called()
 

@@ -103,8 +103,12 @@ def verify_command(event):
 def fire():
     url = os.environ.get("CLAUDE_ROUTINE_FIRE_URL", "").strip()
     token = os.environ.get("CLAUDE_ROUTINE_FIRE_TOKEN", "").strip()
-    if url != FIRE_URL or not re.fullmatch(r"sk-ant-oat01-[A-Za-z0-9_-]+", token):
-        raise RuntimeError("Routine Fire URL or token shape mismatch; no request sent")
+    if url != FIRE_URL:
+        raise RuntimeError("Routine Fire URL does not match the approved YouTube Routine; no request sent")
+    # The Claude API documents the per-Routine token prefix but does not
+    # guarantee a specific character class for the remainder of the token.
+    if not token.startswith("sk-ant-oat01-") or len(token) <= len("sk-ant-oat01-"):
+        raise RuntimeError("Claude Routine token is missing or does not have its required prefix; no request sent")
     # Critically, the claim is durable before the POST; do not retry uncertain runs.
     note(CLAIM + "\nOne-shot AUTH probe claim; non-idempotent Routine POST may occur once.")
     text = (
