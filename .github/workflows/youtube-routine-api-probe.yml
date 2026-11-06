@@ -18,7 +18,7 @@ jobs:
       github.event.issue.pull_request &&
       github.event.comment.user.login == github.repository_owner &&
       github.event.comment.author_association == 'OWNER' &&
-      github.event.comment.body == 'YT-AUTODEV-API-PROBE-V2 sha=3d0b82134c2298a78325e4b574231b0bccfd068a'
+      github.event.comment.body == 'YT-AUTODEV-API-PROBE-V3 sha=3d0b82134c2298a78325e4b574231b0bccfd068a'
     runs-on: ubuntu-latest
     timeout-minutes: 4
     permissions:
