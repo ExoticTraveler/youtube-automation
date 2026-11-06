@@ -107,6 +107,9 @@ class ReconcileSafety(unittest.TestCase):
             return 123
         with patch.object(ctl, "live", side_effect=lambda t: {"head":{"sha":t["initial_sha"]}}), \
              patch.object(ctl, "receipts", side_effect=lambda pr:receipts_map[pr]), \
+             patch.object(ctl, "comments", side_effect=lambda pr: [
+                 {"user": {"login": ctl.BOT}, "body": b, "id": 111}
+                 for b in receipts_map[pr]]), \
              patch.object(recon, "check_no_stale_changes"), \
              patch.object(ctl, "check_code_scope"), \
              patch.object(ctl, "check_ci", return_value=123), \
