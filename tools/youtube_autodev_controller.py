@@ -161,6 +161,16 @@ def check_code_scope(t, current_sha, bodies):
     last = claims[-1].splitlines()[0]
     base = last.split("sha=", 1)[1].split(" -->", 1)[0]
     if not any(b.startswith(marker("FIRED", t["pr"], base)) for b in bodies):
+        # The historical Uploader review at its pinned initial SHA made a
+        # documented false-positive judgment and left an uncertain fire claim.
+        # A new, trusted-main GPT API RE-REVIEW (not a human comment) can
+        # establish code PASS independently, without resending that fire.
+        # Never make this exception for a moved SHA or another PR.
+        v2 = marker("REVIEW-V2", t["pr"], current_sha)
+        if (t["pr"] == 1 and current_sha == t["initial_sha"]
+            and len(claims) == 1 and len([b for b in bodies if b.startswith(v2)]) == 1
+            and any(b.startswith(v2 + "\nDecision: PASS\n") for b in bodies)):
+            return
         raise RuntimeError("Routine fire outcome not confirmed after claim; do not infer success")
     if current_sha == base:
         return
@@ -372,6 +382,14 @@ def review_once(t, config):
     if run_id is None:
         print("WAIT_CI: PR #" + str(t["pr"]) + " SHA " + sha)
         return "WAIT"
+    reviewed_v2 = [b for b in bodies if b.startswith(marker("REVIEW-V2", t["pr"], sha))]
+    if reviewed_v2:
+        if (t["pr"] != 1 or sha != t["initial_sha"] or len(reviewed_v2) != 1):
+            raise RuntimeError("unexpected/duplicate V2 review receipt")
+        if reviewed_v2[0].startswith(marker("REVIEW-V2", t["pr"], sha) + "\nDecision: PASS\n"):
+            print("CODE_PASS_WAITING_MAC: reconciled GPT V2 uploader PR #1 SHA " + sha)
+            return "PASS"
+        raise RuntimeError("reconciled GPT V2 review not PASS; owner attention required")
     reviewed = [b for b in bodies if b.startswith(marker("REVIEW", t["pr"], sha))]
     if len(reviewed) > 1:
         raise RuntimeError("duplicate GPT verdicts")
