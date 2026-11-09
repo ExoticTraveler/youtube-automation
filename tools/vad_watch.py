@@ -107,8 +107,10 @@ def main(argv=None):
                 jobs = vad_batch.discover(args.root)
                 log(log_path, "SCAN_ONLY", jobs=len(jobs))
                 return 0
-            previous, observed, _ = scan(args.root, args.volume, args.editor,
-                                         previous, observed, args.quiet_seconds, log_path)
+            previous, observed, result = scan(args.root, args.volume, args.editor,
+                                              previous, observed, args.quiet_seconds, log_path)
+            if result not in (None, "CREATED", "SKIP_VERIFIED"):
+                raise RuntimeError(f"PROCESS_{result}")
         except (OSError, ValueError, RuntimeError) as exc:
             log(log_path, "BLOCKED", error=str(exc))
             print(f"BLOCKED: {exc}", file=sys.stderr)
