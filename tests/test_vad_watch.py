@@ -41,6 +41,44 @@ class WatchTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0], units[0].resolve())
                 self.assertEqual(json.loads(log.read_text().splitlines()[-1])["status"], "CREATED")
 
+    def test_processing_failure_stops_supervisor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            volume = base / "volume"
+            volume.mkdir()
+            editor = base / "editor.py"
+            editor.write_text("# fixture editor")
+            state = base / "state"
+            with patch.object(watch, "scan", return_value=({}, {}, "FAILED")) as scan:
+                result = watch.main([
+                    "--volume", str(volume), "--root", str(volume),
+                    "--editor", str(editor), "--state-dir", str(state)])
+            self.assertEqual(result, 1)
+            self.assertEqual(scan.call_count, 1)
+            statuses = [json.loads(line) for line in
+                        (state / "vad_watch.jsonl").read_text().splitlines()]
+            self.assertEqual(statuses[-1]["status"], "BLOCKED")
+            self.assertIn("PROCESS_FAILED", statuses[-1]["error"])
+
+    def test_stop_marker_prevents_processing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            volume = base / "volume"
+            volume.mkdir()
+            editor = base / "editor.py"
+            editor.write_text("# fixture editor")
+            state = base / "state"
+            state.mkdir()
+            (state / "STOP").touch()
+            with patch.object(watch, "scan") as scan:
+                result = watch.main([
+                    "--volume", str(volume), "--root", str(volume),
+                    "--editor", str(editor), "--state-dir", str(state)])
+            self.assertEqual(result, 0)
+            scan.assert_not_called()
+            record = json.loads((state / "vad_watch.jsonl").read_text().splitlines()[-1])
+            self.assertEqual(record["status"], "STOPPED")
+
     def test_mount_required(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(RuntimeError, "VOLUME_NOT_MOUNTED"):
