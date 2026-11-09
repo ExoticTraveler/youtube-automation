@@ -72,11 +72,11 @@ After pinning and copying the approved PR code into a stable Mac-local code dire
 For an audit of the exact command plan (no writes), an operator would use:
 
 ```sh
-python3 tools/vad_launchd_prepare.py \\
-  --volume "/Volumes/New Volume" \\
-  --root "/Volumes/New Volume" \\
-  --editor "$HOME/Downloads/youtube_edit.py" \\
-  --watcher "$HOME/Library/Application Support/youtube-vad/code/vad_watch.py" \\
+python3 tools/vad_launchd_prepare.py \
+  --volume "/Volumes/New Volume" \
+  --root "/Volumes/New Volume" \
+  --editor "$HOME/Downloads/youtube_edit.py" \
+  --watcher "$HOME/Library/Application Support/youtube-vad/code/vad_watch.py" \
   --state-dir "$HOME/Library/Application Support/youtube-vad"
 ```
 
