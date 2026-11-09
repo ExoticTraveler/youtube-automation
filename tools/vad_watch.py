@@ -42,6 +42,7 @@ def scan(root, volume, editor, previous, observed_at, quiet_seconds, log_path):
         if status != "READY":
             if status != "SKIP_VERIFIED":
                 log(log_path, status, unit=str(unit))
+                raise RuntimeError(f"{status}: {unit}")
             continue
         try:
             state = vad_batch.snapshot(unit)
