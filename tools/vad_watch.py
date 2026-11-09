@@ -89,33 +89,33 @@ def main(argv=None):
     if args.state_dir.resolve() == args.volume.resolve() or args.volume.resolve() in args.state_dir.resolve().parents:
         p.error("state-dir must be on the Mac, outside the external volume")
     args.state_dir.mkdir(parents=True, exist_ok=True)
-    lock = (args.state_dir / "vad_watch.lock").open("a+")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print("ALREADY_RUNNING", file=sys.stderr)
-        return 2
-    log_path = args.state_dir / "vad_watch.jsonl"
-    previous, observed = {}, {}
-    while True:
-        if (args.state_dir / "STOP").exists():
-            log(log_path, "STOPPED")
-            return 0
+    with (args.state_dir / "vad_watch.lock").open("a+") as lock:
         try:
-            if args.once:
-                check_volume(args.volume, args.root)
-                jobs = vad_batch.discover(args.root)
-                log(log_path, "SCAN_ONLY", jobs=len(jobs))
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("ALREADY_RUNNING", file=sys.stderr)
+            return 2
+        log_path = args.state_dir / "vad_watch.jsonl"
+        previous, observed = {}, {}
+        while True:
+            if (args.state_dir / "STOP").exists():
+                log(log_path, "STOPPED")
                 return 0
-            previous, observed, result = scan(args.root, args.volume, args.editor,
-                                              previous, observed, args.quiet_seconds, log_path)
-            if result not in (None, "CREATED", "SKIP_VERIFIED"):
-                raise RuntimeError(f"PROCESS_{result}")
-        except (OSError, ValueError, RuntimeError) as exc:
-            log(log_path, "BLOCKED", error=str(exc))
-            print(f"BLOCKED: {exc}", file=sys.stderr)
-            return 1
-        time.sleep(args.interval)
+            try:
+                if args.once:
+                    check_volume(args.volume, args.root)
+                    jobs = vad_batch.discover(args.root)
+                    log(log_path, "SCAN_ONLY", jobs=len(jobs))
+                    return 0
+                previous, observed, result = scan(args.root, args.volume, args.editor,
+                                                  previous, observed, args.quiet_seconds, log_path)
+                if result not in (None, "CREATED", "SKIP_VERIFIED"):
+                    raise RuntimeError(f"PROCESS_{result}")
+            except (OSError, ValueError, RuntimeError) as exc:
+                log(log_path, "BLOCKED", error=str(exc))
+                print(f"BLOCKED: {exc}", file=sys.stderr)
+                return 1
+            time.sleep(args.interval)
 
 
 if __name__ == "__main__":
