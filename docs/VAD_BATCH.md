@@ -1,6 +1,6 @@
 # VAD UNIT batch discovery — staged, opt-in
 
-Status: watcher code and synthetic tests are available. The watcher is **not installed or running**, and no real HDD unit has been processed.
+Status: watcher, batch and staging-only launchd config generator are available on draft PR #16 (stacked on PR #5). The watcher is **not installed or running**, and no real HDD UNIT has been processed. The owner confirmed a disposable INT-5 FCPXML bundle imports into DaVinci Resolve.
 
 The existing Mac-local `youtube_edit.py` remains the editor. This wrapper only discovers units and invokes that editor when explicitly allowed. No video/audio or personal transcript is stored in GitHub.
 
@@ -35,7 +35,7 @@ python3 tools/vad_batch.py --root "<ROOT>"
 python3 tools/vad_batch.py --root "<ROOT>" --editor "<LOCAL_YOUTUBE_EDIT_PY>" --run
 ```
 
-Default: dry run, no editor invocation and no creation. `--run` explicitly opts in, and requires a pre-existing local editor script. This has not yet been integrated with a file watcher or launchd; simply copying files does not trigger it automatically.
+Default for the batch CLI: dry run, no editor invocation and no creation. `--run` explicitly opts in, and requires a pre-existing local editor script. The **separate** `vad_watch.py` has polling logic but has not been enabled on the owner's Mac; simply copying files does not yet trigger processing.
 
 ## Durability and replay
 
@@ -43,12 +43,12 @@ Default: dry run, no editor invocation and no creation. `--run` explicitly opts 
 - Each output is generated at `.OUTPUTNAME.staging/OUTPUTNAME` in the same INT/NAR directory. Staging is retained on failure or a change to input; a later run reports `BLOCKED_PARTIAL`, never silently resumes or overwrites it.
 - A successful output is published by a same-filesystem rename, followed by an adjacent `OUTPUTNAME.manifest.json`. The manifest binds the unit path, source signature, output member metadata and bounded-content signature and engine. A verified repeat reports `SKIP_VERIFIED`.
 - An old output without a matching manifest, a changed input/output, or a crash after output rename but before manifest creation reports `BLOCKED_UNVERIFIED`. Such outputs are **not** overwritten. Inspect them locally before any manual recovery.
-- The output validation requires nonempty regular output members and rejects symlinks, but does not independently verify that Final Cut can import the entire .fcpxmld bundle. That remains a Mac acceptance test.
+- The output validation requires nonempty regular output members and rejects symlinks, but does not independently verify DaVinci Resolve compatibility; the owner separately confirmed import of a disposable INT-5 bundle, but no full watcher-created live HDD bundle has been imported.
 - Failures/partial stages need operator inspection. Do not automatically delete them; media processing is not assumed idempotent. No batch-retry loop is enabled.
 
 ## Local polling supervisor
 
-`tools/vad_watch.py` is opt-in. It does not install or enable a launchd job. It checks that the exact external volume is mounted and the root is beneath it, then scans every two minutes. A UNIT needs two identical scans separated by at least two minutes, with every file at least two minutes old. It processes one UNIT per scan. A second supervisor exits with `ALREADY_RUNNING` because of a local file lock. Outputs remain subject to the batch allowlist, and failed stages remain blocked. A JSON line log lives in the local state directory. If the volume disappears, changes path, or has less than 5 GiB or twice the source size free, the supervisor logs `BLOCKED` and exits. Mac sleep pauses polling; it resumes after wake. This timing check cannot prove a copy is complete if a copier pauses for more than the quiet interval. For strict completion proof, a copier must add an explicit DONE marker after copying, which is not part of this version.
+`tools/vad_watch.py` is opt-in. It does not install or enable a launchd job. It checks that the exact external volume is mounted and the root is beneath it, then scans every two minutes. A UNIT needs two identical scans separated by at least two minutes, with every file at least two minutes old. It processes one UNIT per scan. A second supervisor exits with `ALREADY_RUNNING` because of a local file lock. Outputs remain subject to the batch allowlist; the supervisor now stops on blocked/unverified existing outputs or failed unit processing, rather than advancing to other READY units. A JSON line log lives in the local state directory. If the volume disappears, changes path, or has less than 5 GiB or twice the source size free, the supervisor logs `BLOCKED` and exits. Mac sleep pauses polling; it resumes after wake. This timing check cannot prove a copy is complete if a copier pauses for more than the quiet interval. For strict completion proof, a copier must add an explicit DONE marker after copying, which is not part of this version.
 
 Example after fixture acceptance and explicit approval to run against the HDD:
 
@@ -60,5 +60,24 @@ Use `--once` for a read-only mount/discovery check. To stop a running supervisor
 
 ## Next activation gates
 
-The existing Mac editor generated an INT fixture with timecode, and the resulting bundle passed manifest verification. Its report says REVIEW because the test tone has no speech. Confirm import in DaVinci Resolve and inspect the timeline. Real HDD media stability and output remain unproved. Then approve the specific HDD root and a launchd installation before unattended production use. PR merge and production rollout are separate decisions.
+The existing Mac editor generated an INT-5 disposable fixture with timecode and verified manifest. Its report says REVIEW because the test tone had no speech. The owner confirmed that this FCPXML imports into DaVinci Resolve. Mac `--once` read-only discovery on `/Volumes/New Volume` logged `SCAN_ONLY` and `jobs: 15`, but this counts discovered units, **not necessarily READY units**. The Mac copy in `~/Documents/Codex/.../work/youtube-automation` is not a git checkout and has **not** been verified to match this PR head. Real unattended watcher E2E, live HDD processing, NAR output, reconnect/sleep behavior, and launchd activation remain unproved. Before full-root activation, inspect all discovered unit statuses: enabling an unattended watcher at the volume root could process existing READY units, not just future backups. Approve scope and launchd activation separately from merge.
 
+
+## Staged launchd configuration (NO activation)
+
+`tools/vad_launchd_prepare.py` generates a reviewable `com.exotictraveler.youtube-vad.plist` for macOS using the explicit watcher, editor, volume, root and Mac-local state-directory paths. This is **not** an installer: running without `--write` only prints the plan; `--write` creates a plist **only** under `STATE_DIR/staged/`, never under `~/Library/LaunchAgents`, and never calls `launchctl`. It refuses missing/non-mounted external volumes, incorrect paths and overwriting the staged plist. Unit/RAW content is not modified.
+
+After pinning and copying the approved PR code into a stable Mac-local code directory (outside iCloud Desktop/Documents), a Mac operator can prepare the plist for review. **Do not run this against the temporary Codex Documents worktree or directly load it into launchd.** The plist uses the interpreter preparing it; PATH explicitly includes that interpreter and common Homebrew locations for ffmpeg and ffprobe. Run a disposable-only watcher acceptance test before production activation. Production `RunAtLoad` / `KeepAlive` configuration is inert until installed and bootstrapped with launchctl in a separately approved Mac operation; it may retry after a blocked mount/error and will stop if a STOP marker causes a successful exit. Validate launchd recovery on the actual Mac; it is not covered by GitHub's Linux CI.
+
+For an audit of the exact command plan (no writes), an operator would use:
+
+```sh
+python3 tools/vad_launchd_prepare.py \\
+  --volume "/Volumes/New Volume" \\
+  --root "/Volumes/New Volume" \\
+  --editor "$HOME/Downloads/youtube_edit.py" \\
+  --watcher "$HOME/Library/Application Support/youtube-vad/code/vad_watch.py" \\
+  --state-dir "$HOME/Library/Application Support/youtube-vad"
+```
+
+Once all prerequisite approvals and real Mac checks are complete, `--write` only stages a local plist. It **does not** activate a service. No production launchd activation, full-HDD run, or PR merge is authorized by committing this template.
