@@ -41,6 +41,26 @@ class WatchTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[0], units[0].resolve())
                 self.assertEqual(json.loads(log.read_text().splitlines()[-1])["status"], "CREATED")
 
+    def test_blocked_existing_output_stops_before_processing_other_units(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "ROOT"
+            blocked = root / "PAK" / "Islamabad" / "INT" / "INT-1"
+            ready = root / "PAK" / "Islamabad" / "NAR" / "NAR-1"
+            for unit in (blocked, ready):
+                unit.mkdir(parents=True)
+                clip = unit / "clip.mov"
+                clip.write_bytes(b"fixture")
+                os.utime(clip, (time.time() - 500, time.time() - 500))
+            (blocked.parent / "INT-1_CLEAN_VAD.fcpxmld").mkdir()
+            log = Path(tmp) / "watch.jsonl"
+            with patch.object(watch, "check_volume", return_value=7), \
+                    patch.object(watch.vad_batch, "process_one") as run:
+                with self.assertRaisesRegex(RuntimeError, "BLOCKED_UNVERIFIED"):
+                    watch.scan(root, root, Path("/editor"), {}, {}, 120, log)
+                run.assert_not_called()
+            self.assertEqual(json.loads(log.read_text().splitlines()[-1])["status"],
+                             "BLOCKED_UNVERIFIED")
+
     def test_processing_failure_stops_supervisor(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
