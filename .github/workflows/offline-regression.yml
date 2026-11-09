@@ -47,3 +47,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hashtag_and_upload_request.py' -v
       - name: Run VAD batch filesystem and crash-safety regression
         run: python -m unittest discover -s tests -p 'test_vad_batch.py' -v
+      - name: Run VAD polling watcher regression
+        run: python -m unittest discover -s tests -p 'test_vad_watch.py' -v
+      - name: Validate macOS launchd preparation without activation
+        run: python -m unittest discover -s tests -p 'test_vad_launchd_prepare.py' -v

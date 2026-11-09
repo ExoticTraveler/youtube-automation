@@ -117,11 +117,11 @@ def snapshot(unit):
             st = p.stat()
             sampled = _sample_digest(p, st.st_size)
             again = p.stat()
-            identity = (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
-            if identity != (again.st_size, again.st_mtime_ns, again.st_ctime_ns, again.st_ino):
+            identity = (st.st_size, st.st_mtime_ns, st.st_ino)
+            if identity != (again.st_size, again.st_mtime_ns, again.st_ino):
                 raise ValueError("input changed during snapshot")
             items.append((str(p.relative_to(unit)), st.st_size, st.st_mtime_ns,
-                          st.st_ctime_ns, st.st_ino, sampled))
+                          st.st_ino, sampled))
     return items
 
 
@@ -210,7 +210,7 @@ def write_manifest(dest, unit, input_state):
             os.unlink(tmp)
 
 
-def process_one(unit, dest, editor, root):
+def process_one(unit, dest, editor, root, work_root=None):
     """Writes only the allowlisted sibling output, its staging dir and manifest.
     Output is staged and published only after an input recheck."""
     try:
@@ -225,7 +225,7 @@ def process_one(unit, dest, editor, root):
     before = snapshot(unit)
     now = time.time_ns()
     if not before or any(size == 0 or now - mtime < 60_000_000_000
-                         for _, size, mtime, _, _, _ in before):
+                         for _, size, mtime, _, _ in before):
         return "UNSTABLE"
     try:
         validate_output_target(root, unit, dest)  # re-check immediately before writing
@@ -240,6 +240,8 @@ def process_one(unit, dest, editor, root):
     staged_output = stage / dest.name
     cmd = ["python3", str(editor), "--unit", str(unit), "--output",
            str(staged_output), "--engine", "vad", "--run"]
+    if work_root is not None:
+        cmd += ["--work-root", str(work_root)]
     try:
         result = subprocess.run(cmd, check=False)
         if result.returncode != 0:
@@ -264,6 +266,7 @@ def main(argv=None):
                     help="ROOT containing [COUNTRY/]CITY/{INT,NAR}/UNIT; outputs are "
                          "written beside each UNIT, inside its INT/NAR directory")
     ap.add_argument("--editor", type=Path, help="Mac-local youtube_edit.py")
+    ap.add_argument("--work-root", type=Path, help="local Mac report directory, outside source tree")
     ap.add_argument("--run", action="store_true", help="opt in to VAD execution")
     args = ap.parse_args(argv)
     root = args.root.resolve(strict=True)
@@ -273,7 +276,7 @@ def main(argv=None):
     failures = 0
     for unit, dest, state in jobs:
         if state == "READY" and args.run:
-            state = process_one(unit, dest, args.editor, root)
+            state = process_one(unit, dest, args.editor, root, args.work_root)
         if state in ("FAILED", "INPUT_CHANGED", "UNSTABLE",
                      "BLOCKED_UNVERIFIED", "BLOCKED_PARTIAL", "BLOCKED_OUTPUT_PATH"):
             failures += 1
@@ -283,3 +286,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
