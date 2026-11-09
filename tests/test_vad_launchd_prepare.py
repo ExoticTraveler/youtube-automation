@@ -47,7 +47,7 @@ class PlistPreparation(unittest.TestCase):
                 self.assertEqual(prepare.main(args + ["--write"]), 0)
                 output = state / "staged" / (prepare.LABEL + ".plist")
                 self.assertTrue(output.is_file())
-                self.assertEqual(plistlib.loads(output.read_bytes())["ProgramArguments"][4],
+                self.assertEqual(plistlib.loads(output.read_bytes())["ProgramArguments"][5],
                                  str(root))
                 with self.assertRaises(SystemExit):
                     prepare.main(args + ["--write"])
