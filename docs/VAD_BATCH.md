@@ -1,6 +1,6 @@
 # VAD UNIT batch discovery — staged, opt-in
 
-Status: code and synthetic CI only. **Not installed as an automatic Mac watcher**, and no real HDD unit has been processed by this PR.
+Status: watcher code and synthetic tests are available. The watcher is **not installed or running**, and no real HDD unit has been processed.
 
 The existing Mac-local `youtube_edit.py` remains the editor. This wrapper only discovers units and invokes that editor when explicitly allowed. No video/audio or personal transcript is stored in GitHub.
 
@@ -39,13 +39,26 @@ Default: dry run, no editor invocation and no creation. `--run` explicitly opts 
 
 ## Durability and replay
 
-- The wrapper waits for input files to be nonempty and at least 60 seconds old, compares the source identity before/after execution, and refuses symlinked files. Source identity uses relative path, size, nanosecond modification/change time, inode and SHA-256 of the first/last 64 KiB of each file. This is a **bounded content sample**, not a full media content hash or a guarantee against all concurrent changes.
+- The wrapper waits for input files to be nonempty and at least 60 seconds old, compares the source identity before/after execution, and refuses symlinked files. Source identity uses relative path, size, nanosecond modification time, inode and SHA-256 of the first/last 64 KiB of each file. ctime is excluded because a read of a Mac fixture changed it without changing content. This is a **bounded content sample**, not a full media content hash or a guarantee against all concurrent changes.
 - Each output is generated at `.OUTPUTNAME.staging/OUTPUTNAME` in the same INT/NAR directory. Staging is retained on failure or a change to input; a later run reports `BLOCKED_PARTIAL`, never silently resumes or overwrites it.
 - A successful output is published by a same-filesystem rename, followed by an adjacent `OUTPUTNAME.manifest.json`. The manifest binds the unit path, source signature, output member metadata and bounded-content signature and engine. A verified repeat reports `SKIP_VERIFIED`.
 - An old output without a matching manifest, a changed input/output, or a crash after output rename but before manifest creation reports `BLOCKED_UNVERIFIED`. Such outputs are **not** overwritten. Inspect them locally before any manual recovery.
 - The output validation requires nonempty regular output members and rejects symlinks, but does not independently verify that Final Cut can import the entire .fcpxmld bundle. That remains a Mac acceptance test.
 - Failures/partial stages need operator inspection. Do not automatically delete them; media processing is not assumed idempotent. No batch-retry loop is enabled.
 
+## Local polling supervisor
+
+`tools/vad_watch.py` is opt-in. It does not install or enable a launchd job. It checks that the exact external volume is mounted and the root is beneath it, then scans every two minutes. A UNIT needs two identical scans separated by at least two minutes, with every file at least two minutes old. It processes one UNIT per scan. A second supervisor exits with `ALREADY_RUNNING` because of a local file lock. Outputs remain subject to the batch allowlist, and failed stages remain blocked. A JSON line log lives in the local state directory. If the volume disappears, changes path, or has less than 5 GiB or twice the source size free, the supervisor logs `BLOCKED` and exits. Mac sleep pauses polling; it resumes after wake. This timing check cannot prove a copy is complete if a copier pauses for more than the quiet interval. For strict completion proof, a copier must add an explicit DONE marker after copying, which is not part of this version.
+
+Example after fixture acceptance and explicit approval to run against the HDD:
+
+```sh
+python3 tools/vad_watch.py --volume "/Volumes/New Volume" --root "/Volumes/New Volume" --editor "$HOME/Downloads/youtube_edit.py" --state-dir "$HOME/Library/Application Support/youtube-vad"
+```
+
+Use `--once` for a read-only mount/discovery check. To stop a running supervisor, create `STOP` in its state directory; it exits on the next poll. Remove that marker before a later start. Review `vad_watch.jsonl` for `CREATED`, `SKIP_VERIFIED`, `BLOCKED_PARTIAL`, `BLOCKED_UNVERIFIED`, `FAILED`, or `BLOCKED`. Reports from the Mac editor go to `state-dir/reports`, not its default `~/Downloads/runs`. The supervisor does not automatically restart after a blocking error; a future launchd installation could restart it after the cause is fixed. No unattended operation is active until that installation is approved and performed.
+
 ## Next activation gates
 
-Run the existing Mac editor against synthetic/throwaway UNIT fixtures and verify the generated bundle in Final Cut. Confirm actual media stability and output path conventions; only then consider installing a local watcher with bounded polling and one active job. Mac authentication, PR merge and production rollout are separate decisions.
+The existing Mac editor generated an INT fixture with timecode, and the resulting bundle passed manifest verification. Its report says REVIEW because the test tone has no speech. Confirm import in DaVinci Resolve and inspect the timeline. Real HDD media stability and output remain unproved. Then approve the specific HDD root and a launchd installation before unattended production use. PR merge and production rollout are separate decisions.
+
